@@ -1,0 +1,20 @@
+#ARQUIVO NGINX PARA PAGINAS COM FRAMEWORK (LARAVEL POR EXEMPLO)
+server {
+        listen 80;
+        listen [::]:80;
+
+        root /var/www/your_domain/public;
+
+        index index.php;
+
+        server_name www.domain.com;
+
+        location / {
+                try_files $uri $uri/ /index.php?$query_string;
+        }
+
+        location ~ \.php$ {
+                include snippets/fastcgi-php.conf;
+                fastcgi_pass unix:/var/run/php/php7.4-fpm.sock;
+        }
+}

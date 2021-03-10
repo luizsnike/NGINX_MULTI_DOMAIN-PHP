@@ -1,0 +1,206 @@
+PROCESSO DE INSTALAÇÃO DO NGINX MULTI SITE COM PHP NO UBUNTU
+
+
+### ATUALIZANDO O SISTEMA
+
+sudo apt update && sudo apt upgrade -y
+
+
+### ADICIONANDO REPOSITORIO UNIVERSE
+
+sudo add-apt-repository universe
+
+
+### INSTALANDO O PHP FPM QUE SERÁ USADO PELO NGINX
+
+sudo apt install php-fpm
+
+### INSTALANDO O PHP-MYSQL COM AS LIBS PARA USAR O BANCO
+
+sudo apt install php-mysql
+
+### DESCOBRINDO QUAL VERSÃO ESTA INSTALADA DO PHP PARA INTEGRAR AO NGINX
+
+ls /var/run/php/
+
+# procure polo arquivo .sock, este arquivo vai falar a versão que deverá constar na config do Nginx, mude a versão antes de integrar se for necessário.
+
+### INSTALANDO O NGINX
+
+sudo apt install nginx
+
+
+## Importante ter a noção que o Nginx vai usar o arquivo config setado como DEFAULT SERVER para responder requisições que não atendam as demais configurações, uma request sem nome de DNS por exemplo. Só pode haver um arquivo como DEFAULT SERVER
+
+
+### CONFIGURANDO O DEFAULT SERVER
+
+sudo nano /etc/nginx/sites-available/default
+
+# modifique a linha "index" para priorizar o "index.php"
+	index index.php;
+
+# Habilitando o PHP, modifique as linhas conforme abaixo
+	location ~ \.php$ {
+                include snippets/fastcgi-php.conf;
+                fastcgi_pass unix:/var/run/php/php7.4-fpm.sock; #essa linha deve bater com o arquivo .sock que vc já achou
+	}
+
+
+### CONFIGURANDO UM DOMINIO
+
+## Criando a basta para os arquivos
+
+sudo mkdir -p /var/www/your_domain/public
+
+## Permissões para leitura
+
+sudo chown -R $USER:$USER /var/www/your_domain
+
+## Criando a configuração dento do NGINX
+
+sudo nano /etc/nginx/sites-available/your_domain
+
+## Conteúdo do arquivo se for uma página PHP com paginas de Erros definidas
+
+server {
+        listen 80;
+        listen [::]:80;
+
+        root /var/www/your_domain/public;
+
+        index index.php index.html index.htm;
+
+        server_name www.domain.com;
+
+        location / {
+                try_files $uri $uri/ =404;
+        }
+	error_page   400 /400.html;
+	error_page   403 /403.html;
+	error_page   404 /404.html;
+	error_page   500 502 503 504 /50x.html;
+
+	## Locations -> Fallback
+	location = /400.html {
+	    try_files /400.html @error;
+	    internal;
+	}
+	location = /403.html {
+	    try_files /403.html @error;
+	    internal;
+	}
+	location = /404.html {
+	    try_files /404.html @error;
+	    internal;
+	}
+	location = /50x.html {
+	    try_files /50x.html @error;
+	    internal;
+	}
+
+	## Fallback Directory
+	location @error {
+	    root /var/www/your_domain/html;
+	}
+
+        location ~ \.php$ {
+                include snippets/fastcgi-php.conf;
+                fastcgi_pass unix:/var/run/php/php7.4-fpm.sock;
+        }
+}
+
+## Conteúdo do arquivo se for uma página PHP com Uso de Framework e as páginas de erros são controladas por ele.
+
+server {
+        listen 80;
+        listen [::]:80;
+
+        root /var/www/your_domain/public;
+
+        index index.php;
+
+        server_name www.domain.com;
+
+        location / {
+                try_files $uri $uri/ /index.php?$query_string;
+        }
+
+        location ~ \.php$ {
+                include snippets/fastcgi-php.conf;
+                fastcgi_pass unix:/var/run/php/php7.4-fpm.sock;
+        }
+}
+
+## Exemplo de arquivo de DEFAULT SERVER
+
+server {
+        listen 80 default_server;
+        listen [::]:80 default_server;
+
+        root /var/www/html;
+
+        index index.php index.html index.htm;
+
+        server_name _;
+
+        location / {
+                try_files $uri $uri/ =404;
+        }
+
+        location ~ \.php$ {
+                include snippets/fastcgi-php.conf;
+                fastcgi_pass unix:/var/run/php/php7.4-fpm.sock;
+        }
+}
+
+
+### Montando Link entre arquivos para ativar o arquivo de configuração no NGINX
+
+sudo ln -s /etc/nginx/sites-available/your_domain /etc/nginx/sites-enabled/
+
+### Testando a configuração, se voltar algum erro ele precisa ser corrigido antes de reiniciar o NGINX
+
+sudo nginx -t
+
+### Reiniciando o NGINX
+
+sudo systemctl reload nginx
+
+#### Instalar a proteção SSL vis Let'sCrypt
+https://certbot.eff.org/lets-encrypt/ubuntufocal-nginx
+
+### Instalando o CORE do SNAPD
+sudo snap install core; sudo snap refresh core
+
+### Instalando o CertBot
+sudo snap install --classic certbot
+
+###Linkando o Comando
+sudo ln -s /snap/bin/certbot /usr/bin/certbot
+
+###Instalando os Certificados
+sudo certbot --nginx
+Siga as orientações na tela.
+
+### Renovando os certificados
+sudo certbot renew --dry-run
+
+
+###PRONTO JA DEVE ESTAR FUNCIONANDO
+
+Aqui está o que cada um desses blocos de localização e diretrizes fazem:
+
+listen — Define em qual porta o Nginx irá escutar. Neste caso, ele irá escutar na porta 80, a porta padrão para o HTTP.
+
+root — Define o document root onde os arquivos servidos por este site são armazenados.
+
+index — Define em que ordem o Nginx irá priorizar os arquivos de index para este site. É uma prática comum listar arquivos index.html com uma precedência superior aos arquivos index.php para permitir uma configuração rápida de uma página inicial de manutenção em aplicações PHP. Você pode ajustar essas configurações para melhor se adaptar às necessidades da sua aplicação.
+
+server_name — Define para quais nomes de domínio e/ou endereços IP este bloco de servidor deve responder. Aponte esta diretiva para o nome de domínio do seu servidor ou endereço IP público.
+
+location/ — O primeiro bloco de localização inclui uma diretiva try_files, que verifica a existência de arquivos ou diretórios que correspondam a uma requisição de URI. Se o Nginx não puder encontrar o recurso apropriado, ele irá retornar um erro 404.
+
+location ~ \.php$ — Este bloco de localização lida com o processamento PHP real, apontando o Nginx para o arquivo de configuração fastcgi-php.conf e o arquivo php7.4-fpm.sock, que declara qual soquete está associado ao php-fpm.
+
+location ~ /\.ht — O último bloco de localização lida com os arquivos .htaccess, que o Nginx não processa. Ao adicionar a diretiva deny all, se acontecer de algum arquivo .htaccess ser encontrado no caminho do document root, ele não será apresentado aos visitantes.
